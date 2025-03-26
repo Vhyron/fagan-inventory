@@ -3,6 +3,15 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
+// import modules
+import { initDatabase } from './db/database'
+import { initAuthHandlers } from './modules/auth'
+import { initUserHandlers } from './modules/users'
+import { initStockHandlers } from './modules/stock'
+import { initSupplyHandlers } from './modules/supply'
+import { initTransactionHandlers } from './modules/transaction'
+import { initReportsHandlers } from './modules/reports'
+
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -28,26 +37,54 @@ let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
+    width: 1200,
+    height: 800,
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   })
 
-  // Test active push message to Renderer-process.
+  // test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
+    // open DevTools in development
+    if (process.env.NODE_ENV === 'development') {
+      win.webContents.openDevTools()
+    }
   } else {
-    // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }
 
-// Quit when all windows are closed, except on macOS. There, it's common
+// initialize database and all modules
+function initializeModules() {
+  try {
+    // initialize database
+    initDatabase();
+    
+    // initialize all module handlers
+    initAuthHandlers();
+    initUserHandlers();
+    initStockHandlers();
+    initSupplyHandlers();
+    initTransactionHandlers();
+    initReportsHandlers();
+    
+    console.log('All modules initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize modules:', error);
+    app.quit();
+  }
+}
+
+// quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
@@ -58,11 +95,14 @@ app.on('window-all-closed', () => {
 })
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
+  // on OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  initializeModules();
+  createWindow();
+})
